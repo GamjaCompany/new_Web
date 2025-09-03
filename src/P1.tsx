@@ -35,9 +35,9 @@ const STORAGE_KEY = "@piling_items";
 function mapStatus(status: NotifyMsg["status"]) {
   switch (status) {
     case "GOOD": return { status: "정상" as const, dot: "green" };
-    case "BAD":  return { status: "고장" as const, dot: "red" };
+    case "BAD": return { status: "고장" as const, dot: "red" };
     case "OFF":
-    default:     return { status: "꺼짐" as const, dot: "gray" };
+    default: return { status: "꺼짐" as const, dot: "gray" };
   }
 }
 
@@ -203,6 +203,13 @@ const P1: React.FC = () => {
     client.on("error", (e) => console.error("MQTT Error", e));
     client.on("reconnect", () => console.log("MQTT Reconnecting..."));
     client.on("close", () => console.log("MQTT Closed"));
+
+    (client as any).stream?.addEventListener?.("close", (ev: CloseEvent) => {
+      console.warn("WS closed", { code: ev.code, reason: ev.reason, wasClean: ev.wasClean });
+    });
+    (client as any).stream?.addEventListener?.("error", (ev: Event) => {
+      console.error("WS stream error", ev);
+    });
 
     return () => {
       client.end(true);
