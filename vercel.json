@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; connect-src 'self' wss://*.hivemq.cloud:8884 https://*.openstreetmap.org; img-src * data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self';"
+        }
+      ]
+    }
+  ]
+}
