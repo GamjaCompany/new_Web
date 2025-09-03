@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import mqtt, { MqttClient } from "mqtt";
 import { Toaster, toast } from "react-hot-toast";
@@ -25,6 +25,11 @@ const FALLBACK_RAW: RawDeviceMap = {
   "3": {"battery":"40","temp":"24.6","humi":"70","status":"OFF","lat":"37.869562","lng":"127.742999","recent_obj":["2025-05-01T23:21:52","hog","https://newsimg.hankookilbo.com/2020/04/24/202004241244319174_1.jpg"]},
   "4": {"battery":"20","temp":"24.6","humi":"70","status":"BAD","lat":"37.869501","lng":"127.743001","recent_obj":["2025-05-01T23:21:52","hog","https://newsimg.hankookilbo.com/2020/04/24/202004241244319174_1.jpg"]},
 };
+
+// cctv_url
+const CCTV_FALLBACK = "http://121.187.247.156:8080/800x600.mjpeg";
+// Example user UUID used when publishing CONTROL messages
+const USER_UUID = "AA-BB-CC-DD-EE-FF";
 
 export type Item = {
   id: number;
@@ -113,6 +118,286 @@ const ImagePreview: React.FC<{ src: string; onClose: () => void }> = ({ src, onC
   </div>
 );
 
+/** 탐지 로그 패널 (더미 데이터) */
+const DetectionLogs: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const dummyLogs = [
+    {
+      dateLabel: "2025.09.02",
+      timeLabel: "9:00 A.M.",
+      ago: "9월 2일(토)",
+      target: "사람",
+      image: "https://picsum.photos/seed/person/220/160",
+    },
+    {
+      dateLabel: "2025.09.03",
+      timeLabel: "11:30 A.M.",
+      ago: "9월 3일(일)",
+      target: "고양이",
+      image: "https://picsum.photos/seed/cat/220/160",
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 16,
+        right: 16,
+        bottom: 16,
+        zIndex: 10030,
+        background: "linear-gradient(180deg, #f5fff5 0%, #ecffec 100%)",
+        borderRadius: 24,
+        boxShadow: "0 20px 50px rgba(0,0,0,0.18)",
+        padding: 18,
+        border: "1px solid #d9f7df",
+      }}
+    >
+      <button
+        onClick={onClose}
+        aria-label="close"
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          border: 0,
+          background: "linear-gradient(180deg,#f1f3f5 0%,#eceff1 100%)",
+          boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+          color: "#2d3436",
+          fontSize: 18,
+          fontWeight: 700,
+          lineHeight: 1,
+          cursor: "pointer"
+        }}
+      >
+        ×
+      </button>
+      <div style={{ fontWeight: 800, fontSize: 18, color: "#2ecc71", marginBottom: 12 }}>
+        - 실시간 말뚝 정보 안내
+      </div>
+
+      {dummyLogs.map((log, i) => (
+        <div
+          key={i}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "132px 1fr",
+            gridAutoRows: "min-content",
+            gap: 14,
+            alignItems: "start",
+            padding: 14,
+            marginBottom: 12,
+            background: "#ffffff",
+            borderRadius: 18,
+            boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+            border: "1px solid #eef5ef",
+          }}
+        >
+          {/* 좌측 이미지 */}
+          <img
+            src={log.image}
+            alt={log.target}
+            style={{
+              width: 132,
+              height: 110,
+              borderRadius: 16,
+              objectFit: "cover",
+              objectPosition: "center",
+            }}
+          />
+
+          {/* 우측 내용 */}
+          <div style={{ display: "grid", gap: 10 }}>
+            {/* 날짜/시간: 두 줄로 (줄바꿈 고정) */}
+            <div style={{ textAlign: "center" }}>
+              <div style={{ color: "#27ae60", fontWeight: 800 }}>
+                <div style={{ fontSize: 18, lineHeight: 1.1 }}>{log.dateLabel}</div>
+                <div style={{ fontSize: 14, opacity: 0.85, marginTop: 2 }}>{log.timeLabel}</div>
+              </div>
+            </div>
+
+            {/* 한 줄 경고 날짜 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "center", textAlign: "center" }}>
+              <div style={{ fontSize: 23 }}>⚠️</div>
+              <div style={{ fontSize: 19, fontWeight: 800, color: "#27ae60", whiteSpace: "nowrap" }}>{log.ago}</div>
+            </div>
+
+            {/* 탐지대상: 한 줄 유지 */}
+            <div style={{ fontSize: 18, fontWeight: 900, color: "#2d3436", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>
+              탐지대상: {log.target}
+            </div>
+          </div>
+
+            <div
+              style={{
+                gridColumn: "1 / -1",           // 두 칼럼 전체 폭 사용
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr", // 1:1 비율
+                width: "100%",
+              }}
+            >
+              <button
+                style={{
+                  height: "48px",
+                  borderRadius: "0 0 0 18px",
+                  border: "2px solid #a3f7bf",
+                  background: "#eafff3",
+                  color: "#27ae60",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  width: "100%",
+                }}
+              >
+                유해조수 알아보기
+              </button>
+              <button
+                style={{
+                  height: "48px",
+                  borderRadius: "0 0 18px 0",
+                  border: "2px solid #cde7ff",
+                  background: "#f1f8ff",
+                  color: "#0984e3",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  width: "100%",
+                }}
+              >
+                상세보기
+              </button>
+            </div>
+          </div>
+      ))}
+    </div>
+  );
+};
+
+/** CCTV overlay centered and always on top */
+const CctvOverlay: React.FC<{
+  src: string;
+  onClose: () => void;
+  onPanLeftStart: () => void;
+  onPanLeftStop: () => void;
+  onPanRightStart: () => void;
+  onPanRightStop: () => void;
+}> = ({ src, onClose, onPanLeftStart, onPanLeftStop, onPanRightStart, onPanRightStop }) => {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "grid",
+        placeItems: "center",
+        zIndex: 300000,           // ensure it is above everything
+        background: "transparent" // or 'rgba(0,0,0,0.25)' if you want a dim
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "relative",
+          /* 4:3 비율(800x600 기준) + 좀 더 작은 최대 크기 */
+          width: "min(50vw, calc(60vh * (4 / 3)), 440px)",
+          aspectRatio: "4 / 3",
+          background: "#000",
+          borderRadius: 16,
+          overflow: "hidden",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.32)"
+        }}
+      >
+        <img
+          src={src}
+          alt="CCTV stream"
+          style={{
+            width: "100%",
+            height: "100%",
+            /* 원본 프레임을 자르지 않고 4:3 캔버스에 맞춤 */
+            objectFit: "contain",
+            display: "block",
+            background: "#000"
+          }}
+        />
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          aria-label="close"
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            border: 0,
+            background: "rgba(255,255,255,0.9)",
+            cursor: "pointer",
+            fontSize: 18,
+            fontWeight: 700,
+            zIndex: 2
+          }}
+        >
+          ×
+        </button>
+        {/* PTZ buttons */}
+        <button
+          aria-label="pan left"
+          onMouseDown={onPanLeftStart}
+          onMouseUp={onPanLeftStop}
+          onMouseLeave={onPanLeftStop}
+          onTouchStart={(e) => { e.preventDefault(); onPanLeftStart(); }}
+          onTouchEnd={(e) => { e.preventDefault(); onPanLeftStop(); }}
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: 12,
+            transform: "translateY(-50%)",
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            border: "0",
+            background: "rgba(255,255,255,0.9)",
+            boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+            cursor: "pointer",
+            fontSize: 24,
+            fontWeight: 700,
+            zIndex: 2
+          }}
+        >
+          ←
+        </button>
+        <button
+          aria-label="pan right"
+          onMouseDown={onPanRightStart}
+          onMouseUp={onPanRightStop}
+          onMouseLeave={onPanRightStop}
+          onTouchStart={(e) => { e.preventDefault(); onPanRightStart(); }}
+          onTouchEnd={(e) => { e.preventDefault(); onPanRightStop(); }}
+          style={{
+            position: "absolute",
+            top: "50%",
+            right: 12,
+            transform: "translateY(-50%)",
+            width: 56,
+            height: 56,
+            borderRadius: "50%",
+            border: "0",
+            background: "rgba(255,255,255,0.9)",
+            boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+            cursor: "pointer",
+            fontSize: 24,
+            fontWeight: 700,
+            zIndex: 2
+          }}
+        >
+          →
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const isFiniteCoord = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 // ===== 지도 bounds를 마커에 맞추기 =====
@@ -166,6 +451,12 @@ const P2: React.FC = () => {
   const [alertedIds, setAlertedIds] = useState<Set<number>>(new Set());
   const [connected, setConnected] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [cctvOpen, setCctvOpen] = useState(false);
+  const [currentId, setCurrentId] = useState<number | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
+  // Map height should adapt when bottom panel is open
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelHeight, setPanelHeight] = useState(0);
 
   // 3) MQTT 연결 & 요청/응답
   const clientRef = useRef<MqttClient | null>(null);
@@ -316,6 +607,39 @@ const P2: React.FC = () => {
     };
   }, [ids]);
 
+  // ---- PTZ helpers (publish to MQTT) ----
+  const publishPTZ = useCallback((dir: "left" | "right", state: "start" | "stop") => {
+    const id = currentId;
+    const client = clientRef.current;
+    if (!id || !client) return;
+
+    // Topic format: CONTROL/device/{deviceId}
+    const topic = `CONTROL/device/${id}`;
+
+    // Server spec mentions duplicate "id" fields; JSON cannot have duplicate keys.
+    // We therefore include the device id (id) and the user uuid (user) separately.
+    // "commend" will be one of: "left", "right" when pressing; "stop" on release.
+    const commend = state === "stop" ? "stop" : dir; // start -> left/right, stop -> stop
+
+    const payload = {
+      user: USER_UUID,           // maps to "id": "유저UUID" in your spec
+      timestamp: nowHHMMSS(),    // HH:MM:SS
+      commend,                   // "left" | "right" | "stop"
+      id,                        // device id echoed in body
+    } as const;
+
+    try {
+      client.publish(topic, JSON.stringify(payload));
+    } catch (e) {
+      console.error("Failed to publish CONTROL message", e);
+    }
+  }, [currentId]);
+
+  const panLeftStart = useCallback(() => publishPTZ("left", "start"), [publishPTZ]);
+  const panLeftStop  = useCallback(() => publishPTZ("left", "stop"),  [publishPTZ]);
+  const panRightStart = useCallback(() => publishPTZ("right", "start"), [publishPTZ]);
+  const panRightStop  = useCallback(() => publishPTZ("right", "stop"),  [publishPTZ]);
+
   // 4) rawMap × idSet 교집합 → 지도 items
   const items = useMemo<Item[]>(() => {
     const out: Item[] = [];
@@ -349,7 +673,6 @@ const P2: React.FC = () => {
     return out;
   }, [rawMap, idSet]);
 
-  const [currentId, setCurrentId] = useState<number | null>(null);
   // 처음 진입 시에는 패널을 표시하지 않는다. (마커 클릭 시에만 표시)
 
   const center = useMemo(() => {
@@ -382,10 +705,35 @@ const P2: React.FC = () => {
     return `${day}일 전`;
   };
 
+  useEffect(() => {
+    const update = () => {
+      if (current && panelRef.current) {
+        const h = Math.ceil(panelRef.current.getBoundingClientRect().height);
+        // add a small gap to keep map controls visible above the panel
+        setPanelHeight(h + 16);
+      } else {
+        setPanelHeight(0);
+      }
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [current]);
+
   return (
-    <div style={{ position: "relative", height: "100vh", width: "100%" }}>
+    <div style={{ position: "relative", height: "100%", width: "100%" }}>
       <Toaster position="top-center" />
-      <MapContainer center={[center.lat, center.lng]} zoom={15} style={{ height: "100%", width: "100%", zIndex: 0 }} preferCanvas>
+      <MapContainer
+        center={[center.lat, center.lng]}
+        zoom={15}
+        style={{
+          height: panelHeight > 0 ? `calc(100% - ${panelHeight}px)` : '100%',
+          width: '100%',
+          zIndex: 0,
+          transition: 'height 160ms ease'
+        }}
+        preferCanvas
+      >
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OSM contributors'
@@ -416,32 +764,66 @@ const P2: React.FC = () => {
       {/* Bottom info card for selected marker - 개선된 버전 */}
       {current && (
         <div
+          ref={panelRef}
           style={{
             position: "absolute",
-            left: 20,
-            right: 20,
-            bottom: 24,
+            left: 16,
+            right: 16,
+            bottom: 16,
             background: "linear-gradient(135deg, #ffffff 0%, #fafafa 100%)",
             borderRadius: 24,
             boxShadow: "0 20px 50px rgba(0,0,0,0.15), 0 5px 20px rgba(0,0,0,0.08)",
             padding: 24,
-            zIndex: 9999,
+            zIndex: 10010,
             pointerEvents: "auto",
             border: "1px solid rgba(255,255,255,0.5)",
           }}
         >
+          {/* 실시간 확인 버튼 - 상단 우측에 위치 */}
+          <button
+            onClick={() => setCctvOpen(true)}
+            aria-label="실시간 확인"
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 54,
+              padding: '4px 12px',
+              fontSize: 12,
+              border: '1.5px solid #0984e3',
+              background: '#f4f9fd',
+              color: '#0984e3',
+              borderRadius: 8,
+              cursor: 'pointer',
+              fontWeight: 600,
+              boxShadow: '0 1.5px 4px rgba(9,132,227,0.04)',
+              transition: 'background 0.15s,border 0.15s',
+              zIndex: 2,
+              lineHeight: 1.1,
+            }}
+            onMouseOver={e => {
+              (e.target as HTMLButtonElement).style.background = "#d6eaff";
+              (e.target as HTMLButtonElement).style.borderColor = "#74b9ff";
+            }}
+            onMouseOut={e => {
+              (e.target as HTMLButtonElement).style.background = "#f4f9fd";
+              (e.target as HTMLButtonElement).style.borderColor = "#0984e3";
+            }}
+          >
+            실시간 확인
+          </button>
           <button
             onClick={() => setCurrentId(null)}
             aria-label="close"
             style={{
               position: 'absolute',
-              top: 10,
-              right: 10,
-              width: 34,
-              height: 34,
+              top: 12,
+              right: 12,
+              width: 40,
+              height: 40,
               borderRadius: 12,
               border: '0',
-              background: 'rgba(0,0,0,0.06)',
+              background: 'linear-gradient(180deg,#f1f3f5 0%,#eceff1 100%)',
+              boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
               color: '#2d3436',
               fontSize: 18,
               fontWeight: 700,
@@ -582,17 +964,21 @@ const P2: React.FC = () => {
             </div>
 
             {/* 하단: 최근 탐지 시기 (꽉찬 너비) */}
-            <div style={{
-              padding: "16px 20px",
-              borderRadius: 18,
-              background: "linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)",
-              boxShadow: "0 6px 20px rgba(253, 203, 110, 0.25)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              width: "100%"
-            }}>
+            <div
+              role="button"
+              onClick={() => setShowLogs(true)}
+              style={{
+                cursor: "pointer",
+                padding: "16px 20px",
+                borderRadius: 18,
+                background: "linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)",
+                boxShadow: "0 6px 20px rgba(253, 203, 110, 0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                width: "100%"
+              }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ 
                   fontSize: 24,
@@ -647,7 +1033,18 @@ const P2: React.FC = () => {
           </div>
         </div>
       )}
+      {showLogs && <DetectionLogs onClose={() => setShowLogs(false)} />}
       {previewSrc && <ImagePreview src={previewSrc} onClose={() => setPreviewSrc(null)} />}
+      {cctvOpen && currentId && (
+        <CctvOverlay
+          src={CCTV_FALLBACK}
+          onClose={() => setCctvOpen(false)}
+          onPanLeftStart={panLeftStart}
+          onPanLeftStop={panLeftStop}
+          onPanRightStart={panRightStart}
+          onPanRightStop={panRightStop}
+        />
+      )}
     </div>
   );
 };
