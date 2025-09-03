@@ -179,6 +179,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import mqtt, { MqttClient } from "mqtt";
+import { Toaster, toast } from "react-hot-toast";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -351,22 +352,22 @@ const P2: React.FC = () => {
     client.on("message", (topic, payload) => {
       try {
         const text = String(payload);
-    
+
         // 1) 전체 장치표
         if (topic.startsWith("Response/")) {
           const parsed = JSON.parse(text) as RawDeviceMap;
           if (parsed && typeof parsed === "object") setRawMap(parsed);
           return;
         }
-    
+
         // 2) 실시간 알림
-        if (topic === "Notify") {
+        if (topic.toLowerCase() === "notify") {
           const msg = JSON.parse(text) as any;
           if (!msg || msg.cmd !== "alert") return;
-    
+
           const numId = Number(msg.id ?? msg.idx);
           if (!Number.isFinite(numId)) return;
-    
+
           const recentArr =
             Array.isArray(msg.recent_obj) && msg.recent_obj.length >= 3
               ? [
@@ -375,9 +376,9 @@ const P2: React.FC = () => {
                   String(msg.recent_obj[2]),
                 ] as [string, string, string]
               : undefined;
-    
+
           if (!recentArr) return;
-    
+
           // rawMap 내 해당 id만 recent_obj 교체
           setRawMap((prev) => {
             const key = String(numId);
@@ -385,14 +386,45 @@ const P2: React.FC = () => {
             if (!cur) return prev; // 아직 Response 데이터가 없으면 스킵
             return { ...prev, [key]: { ...cur, recent_obj: recentArr } };
           });
-    
+
           // 마커 빨간색 표시
           setAlertedIds((prev) => {
             const next = new Set(prev);
             next.add(numId);
             return next;
           });
-    
+
+          // 화면 상단 토스트 알림 (간결한 경고 스타일)
+          const now = new Date();
+          const hhmm = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+          toast.custom(() => (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                background: 'rgba(60,60,60,0.85)',
+                color: '#fff',
+                padding: '20px 25px',
+                borderRadius: 28,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                backdropFilter: 'blur(6px)',
+              }}
+            >
+              <div style={{ fontSize: 32, lineHeight: 1, marginRight: 15, marginLeft: 15}}>⚠️</div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                <div style={{ fontWeight: 600, fontSize: 16, marginRight: 25 }}>
+                  침입 알림!
+                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, opacity: 0.85 }}>{hhmm}</span>
+                </div>
+                <div style={{ fontSize: 14, opacity: 0.95 }}>
+                  "{recentArr[1] ?? '대상'}"가 침입했습니다!
+                </div>
+              </div>
+            </div>
+          ), { duration: 5000 });
+
           return;
         }
       } catch (e) {
@@ -471,9 +503,27 @@ const P2: React.FC = () => {
 
   const current = useMemo(() => items.find((i) => i.id === currentId) ?? null, [items, currentId]);
 
+  // Helper: 최근 시각을 "몇 분 전" 등으로 변환
+  const timeAgo = (iso?: string) => {
+    if (!iso) return "-";
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return iso;
+    const diff = Date.now() - t;
+    const sec = Math.floor(diff / 1000);
+    if (sec < 30) return "방금 전";
+    if (sec < 60) return `${sec}초 전`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}분 전`;
+    const hour = Math.floor(min / 60);
+    if (hour < 24) return `${hour}시간 전`;
+    const day = Math.floor(hour / 24);
+    return `${day}일 전`;
+  };
+
   return (
     <div style={{ position: "relative", height: "100vh", width: "100%" }}>
-      <MapContainer center={[center.lat, center.lng]} zoom={15} style={{ height: "100%", width: "100%" }} preferCanvas>
+      <Toaster position="top-center" />
+      <MapContainer center={[center.lat, center.lng]} zoom={15} style={{ height: "100%", width: "100%", zIndex: 0 }} preferCanvas>
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OSM contributors'
@@ -488,7 +538,6 @@ const P2: React.FC = () => {
             eventHandlers={{
               click: () => {
                 setCurrentId(it.id);
-                // 클릭 시 알림 상태 해제 → 빨간 마커를 파란 마커로 복귀
                 setAlertedIds((prev) => {
                   if (!prev.has(it.id)) return prev;
                   const next = new Set(prev);
@@ -497,28 +546,77 @@ const P2: React.FC = () => {
                 });
               },
             }}
-          >
-            <Popup>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", alignItems: "center" }}>
-                  <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 10, background: it.statusDot, marginRight: 8 }} />
-                  <strong>{it.id}번 말뚝</strong>&nbsp;— {it.status}
-                </div>
-                <div><b>배터리:</b> {it.battery || "-"}</div>
-                {it.recent && (
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <img src={it.recent.image} alt="preview" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6 }} />
-                    <div style={{ fontSize: 12 }}>
-                      <div>{it.recent.time}</div>
-                      <div>{it.recent.target}</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Popup>
-          </Marker>
+          />
         ))}
       </MapContainer>
+
+      {/* Bottom info card for selected marker */}
+      {current && (
+        <div
+          style={{
+            position: "absolute",
+            left: 16,
+            right: 16,
+            bottom: 20,
+            background: "#fff",
+            borderRadius: 18,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            padding: 16,
+            display: "grid",
+            gridTemplateColumns: "1fr auto",
+            gap: 12,
+            alignItems: "center",
+            zIndex: 9999,
+            pointerEvents: "auto",
+          }}
+        >
+          {/* 좌측 정보들 */}
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, border: "2px solid #d33", color: "#d33", display: "grid", placeItems: "center", fontWeight: 700 }}>🔔</div>
+              <div style={{ fontWeight: 700 }}>{current.id}번 퇴치기</div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 32, height: 52, borderRadius: 6, border: "2px solid #2e7d32", color: "#2e7d32", display: "grid", placeItems: "center", fontWeight: 700 }}>
+                {current.battery ? `${current.battery}%` : "--%"}
+              </div>
+              <div style={{ color: current.statusDot === "red" ? "#d33" : "#2e7d32", fontWeight: 700 }}>
+                상태: {current.status}
+              </div>
+            </div>
+
+            <div style={{
+              marginTop: 4,
+              padding: 12,
+              borderRadius: 14,
+              background: "#fdeaea",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 20 }}>⚠️</div>
+                <div style={{ fontWeight: 700, color: "#c62828" }}>최근 탐지 시기</div>
+              </div>
+              <div style={{ fontWeight: 700, color: "#ff6f00" }}>{timeAgo(current.recent?.time)}</div>
+            </div>
+          </div>
+
+          {/* 우측 썸네일 */}
+          <div style={{ width: 150, height: 95, borderRadius: 14, overflow: "hidden", boxShadow: "0 6px 16px rgba(0,0,0,0.2)" }}>
+            {current.recent?.image ? (
+              <img src={current.recent.image} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#888", background: "#f3f3f3" }}>
+                미리보기 없음
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 상태/가이드 패널 */}
       {items.length === 0 && (
