@@ -237,6 +237,16 @@ const DefaultIcon = L.icon({
   popupAnchor: [1, -34],
   shadowSize: [41, 41],
 });
+// DefaultIcon 아래에 추가
+const RedIcon = L.icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+  shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).toString(),
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
 (L.Marker.prototype as any).options.icon = DefaultIcon;
 
 const isFiniteCoord = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -289,6 +299,7 @@ const P2: React.FC = () => {
 
   // 2) 브로커에서 받은 전체 장치표 원본
   const [rawMap, setRawMap] = useState<RawDeviceMap>({});
+  const [alertedIds, setAlertedIds] = useState<Set<number>>(new Set());
   const [connected, setConnected] = useState(false);
 
   // 3) MQTT 연결 & 요청/응답
@@ -330,7 +341,7 @@ const P2: React.FC = () => {
       window.clearTimeout(fallbackTimer);
       setConnected(true);
 
-      client.subscribe("Response/#", (err) => err && console.error("subscribe error", err));
+      client.subscribe(["Response/#", "Notify"], (err) => err && console.error("subscribe error", err));
 
       const mac = "AA:BB:CC:11:22:33"; // 예시 MAC
       const payload = { id: mac, timestamp: nowHHMMSS() };
@@ -338,14 +349,54 @@ const P2: React.FC = () => {
     });
 
     client.on("message", (topic, payload) => {
-      if (!topic.startsWith("Response/")) return;
       try {
-        const parsed = JSON.parse(String(payload)) as RawDeviceMap;
-        if (parsed && typeof parsed === "object") {
-          setRawMap(parsed);
+        const text = String(payload);
+    
+        // 1) 전체 장치표
+        if (topic.startsWith("Response/")) {
+          const parsed = JSON.parse(text) as RawDeviceMap;
+          if (parsed && typeof parsed === "object") setRawMap(parsed);
+          return;
+        }
+    
+        // 2) 실시간 알림
+        if (topic === "Notify") {
+          const msg = JSON.parse(text) as any;
+          if (!msg || msg.cmd !== "alert") return;
+    
+          const numId = Number(msg.id ?? msg.idx);
+          if (!Number.isFinite(numId)) return;
+    
+          const recentArr =
+            Array.isArray(msg.recent_obj) && msg.recent_obj.length >= 3
+              ? [
+                  String(msg.recent_obj[0]),
+                  String(msg.recent_obj[1]),
+                  String(msg.recent_obj[2]),
+                ] as [string, string, string]
+              : undefined;
+    
+          if (!recentArr) return;
+    
+          // rawMap 내 해당 id만 recent_obj 교체
+          setRawMap((prev) => {
+            const key = String(numId);
+            const cur = prev[key];
+            if (!cur) return prev; // 아직 Response 데이터가 없으면 스킵
+            return { ...prev, [key]: { ...cur, recent_obj: recentArr } };
+          });
+    
+          // 마커 빨간색 표시
+          setAlertedIds((prev) => {
+            const next = new Set(prev);
+            next.add(numId);
+            return next;
+          });
+    
+          return;
         }
       } catch (e) {
-        console.error("Response parse error:", e);
+        console.error("MQTT message parse error:", e);
       }
     });
 
@@ -433,7 +484,19 @@ const P2: React.FC = () => {
           <Marker
             key={it.id}
             position={[it.lat, it.lng]}
-            eventHandlers={{ click: () => { setCurrentId(it.id); } }}
+            icon={alertedIds.has(it.id) ? RedIcon : DefaultIcon}
+            eventHandlers={{
+              click: () => {
+                setCurrentId(it.id);
+                // 클릭 시 알림 상태 해제 → 빨간 마커를 파란 마커로 복귀
+                setAlertedIds((prev) => {
+                  if (!prev.has(it.id)) return prev;
+                  const next = new Set(prev);
+                  next.delete(it.id);
+                  return next;
+                });
+              },
+            }}
           >
             <Popup>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
