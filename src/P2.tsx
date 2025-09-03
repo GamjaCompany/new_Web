@@ -1,181 +1,3 @@
-// import React, { useEffect, useMemo, useState } from "react";
-// import { useLocation } from "react-router-dom";
-// import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-// import L from "leaflet";
-// import "leaflet/dist/leaflet.css";
-
-// export type Item = {
-//   id: number;
-//   name: string;
-//   status: "정상" | "고장" | "꺼짐" | string;
-//   statusDot: string;
-//   battery: string;
-//   lat: number;
-//   lng: number;
-// };
-
-// // ✅ 하드코딩 좌표 테이블 (원하는 id/좌표로 채워 넣기)
-// const DEVICE_TABLE: Record<number, { lat: number; lng: number; name?: string }> = {
-//   1: { lat: 37.86952, lng: 127.7430, name: "1번 말뚝" },
-//   2: { lat: 37.86970, lng: 127.7435, name: "2번 말뚝" },
-//   3: { lat: 37.86930, lng: 127.7428, name: "3번 말뚝" },
-// };
-
-// const DefaultIcon = L.icon({
-//   iconUrl: new URL("leaflet/dist/images/marker-icon.png", import.meta.url).toString(),
-//   iconRetinaUrl: new URL("leaflet/dist/images/marker-icon-2x.png", import.meta.url).toString(),
-//   shadowUrl: new URL("leaflet/dist/images/marker-shadow.png", import.meta.url).toString(),
-//   iconSize: [25, 41],
-//   iconAnchor: [12, 41],
-//   popupAnchor: [1, -34],
-//   shadowSize: [41, 41],
-// });
-// (L.Marker.prototype as any).options.icon = DefaultIcon;
-
-// const isFiniteCoord = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-
-// const FitToMarkers: React.FC<{ items: Item[] }> = ({ items }) => {
-//   const map = useMap();
-//   useEffect(() => {
-//     const pts = items.map((i) => [i.lat, i.lng] as [number, number]).filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b));
-//     if (pts.length === 0) return;
-//     const bounds = L.latLngBounds(pts);
-//     if (pts.length === 1) map.setView(bounds.getCenter(), 16);
-//     else map.fitBounds(bounds.pad(0.2));
-//   }, [items, map]);
-//   return null;
-// };
-
-// const P2: React.FC = () => {
-//   const location = useLocation() as { state?: { ids?: number[] } };
-
-//   function loadIdsFromStorage(): number[] {
-//     try {
-//       const raw = localStorage.getItem("@piling_items");
-//       if (!raw) return [];
-//       const arr = JSON.parse(raw) as any[];
-//       return (arr || [])
-//         .map((x) => (x && typeof x.id === "number" ? x.id : NaN))
-//         .filter((n) => Number.isFinite(n)) as number[];
-//     } catch {
-//       return [];
-//     }
-//   }
-
-//   const ids = useMemo(() => location.state?.ids ?? loadIdsFromStorage(), [location.state?.ids]);
-
-//   // ids → 좌표 테이블 매핑
-//   const initialItems = useMemo(() => {
-//     return ids
-//       .map((id) => {
-//         const c = DEVICE_TABLE[id];
-//         if (!c || !isFiniteCoord(c.lat) || !isFiniteCoord(c.lng)) return null;
-//         return {
-//           id,
-//           name: c.name ?? `${id}번 말뚝`,
-//           status: "꺼짐",
-//           statusDot: "gray",
-//           battery: "",
-//           lat: c.lat,
-//           lng: c.lng,
-//         } as Item;
-//       })
-//       .filter(Boolean) as Item[];
-//   }, [ids]);
-
-//   const [items, setItems] = useState<Item[]>(initialItems);
-//   const [currentId, setCurrentId] = useState<number | null>(items[0]?.id ?? null);
-//   const [panel, setPanel] = useState<"info" | "logs">("info");
-
-//   useEffect(() => {
-//     setItems(initialItems);
-//     setCurrentId(initialItems[0]?.id ?? null);
-//   }, [initialItems]);
-
-//   const center = useMemo(() => {
-//     const valid = items.filter((i) => isFiniteCoord(i.lat) && isFiniteCoord(i.lng));
-//     if (valid.length === 0) return { lat: 37.8695, lng: 127.7430 };
-//     const lat = valid.reduce((s, i) => s + i.lat, 0) / valid.length;
-//     const lng = valid.reduce((s, i) => s + i.lng, 0) / valid.length;
-//     return {
-//       lat: Number.isFinite(lat) ? lat : 37.8695,
-//       lng: Number.isFinite(lng) ? lng : 127.7430,
-//     };
-//   }, [items]);
-
-//   const current = useMemo(() => items.find((i) => i.id === currentId) ?? null, [items, currentId]);
-
-//   return (
-//     <div style={{ position: "relative", height: "100vh", width: "100%" }}>
-//       <MapContainer center={[center.lat, center.lng]} zoom={15} style={{ height: "100%", width: "100%" }} preferCanvas>
-//         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OSM contributors' />
-//         <FitToMarkers items={items} />
-
-//         {items
-//           .filter((it) => Number.isFinite(it.lat) && Number.isFinite(it.lng))
-//           .map((it) => (
-//             <Marker key={it.id} position={[it.lat, it.lng]} eventHandlers={{ click: () => { setCurrentId(it.id); setPanel("info"); } }}>
-//               <Popup>
-//                 <div style={{ display: "flex", alignItems: "center" }}>
-//                   <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 10, background: it.statusDot, marginRight: 8 }} />
-//                   <strong>{it.id}번 말뚝</strong>&nbsp;— {it.status}
-//                 </div>
-//               </Popup>
-//             </Marker>
-//           ))}
-//       </MapContainer>
-
-//       {current && panel === "info" && (
-//         <div style={{ position: "fixed", right: 20, top: 20, background: "#fff", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.2)", width: 340, zIndex: 5000 }}>
-//           <div style={{ padding: "12px 16px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-//             <strong>말뚝 정보</strong>
-//             <button onClick={() => setPanel("logs")} style={{ border: 0, background: "#111", color: "#fff", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
-//               감지 로그
-//             </button>
-//           </div>
-//           <div style={{ padding: 16 }}>
-//             <div style={{ display: "grid", gap: 8 }}>
-//               <div><b>ID:</b> {current.id}</div>
-//               <div><b>이름:</b> {current.name}</div>
-//               <div><b>배터리:</b> {current.battery || "-"}</div>
-//               <div style={{ display: "flex", alignItems: "center" }}>
-//                 <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 10, background: current.statusDot, marginRight: 8 }} />
-//                 <b style={{ marginRight: 6 }}>상태:</b> {current.status}
-//               </div>
-//               <div><b>위치:</b> {current.lat.toFixed(6)}, {current.lng.toFixed(6)}</div>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-
-//       {current && panel === "logs" && (
-//         <div style={{ position: "fixed", right: 20, top: 20, background: "#fff", borderRadius: 12, boxShadow: "0 6px 24px rgba(0,0,0,0.2)", width: 340, zIndex: 5000 }}>
-//           <div style={{ padding: "12px 16px", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-//             <strong>감지 로그</strong>
-//             <button onClick={() => setPanel("info")} style={{ border: 0, background: "#111", color: "#fff", borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
-//               정보
-//             </button>
-//           </div>
-//           <div style={{ padding: 16 }}>
-//             <ul style={{ paddingLeft: 18, margin: 0 }}>
-//               <li>2025-01-01 12:00 — 사람 — image1.jpg</li>
-//               <li>2025-01-02 13:34 — 고라니 — image2.jpg</li>
-//             </ul>
-//           </div>
-//         </div>
-//       )}
-
-//       {items.length === 0 && (
-//         <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#555", textAlign: "center", padding: 16 }}>
-//           P1에서 말뚝을 추가한 뒤 “분석 보기”로 들어오면 지도가 표시됩니다.
-//         </div>
-//       )}
-//     </div>
-//   );
-// };
-
-// export default P2;
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import mqtt, { MqttClient } from "mqtt";
@@ -248,7 +70,48 @@ const RedIcon = L.icon({
   popupAnchor: [1, -34],
   shadowSize: [41, 41],
 });
+
 (L.Marker.prototype as any).options.icon = DefaultIcon;
+
+/** 지도 아무 곳이나 클릭하면 패널 닫기 */
+const MapClickCloser: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const map = useMap();
+  useEffect(() => {
+    const handler = () => onClose();
+    map.on('click', handler);
+    return () => {
+      map.off('click', handler);
+    };
+  }, [map, onClose]);
+  return null;
+};
+
+/** 이미지 프리뷰 오버레이 */
+const ImagePreview: React.FC<{ src: string; onClose: () => void }> = ({ src, onClose }) => (
+  <div
+    onClick={onClose}
+    style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.6)',
+      display: 'grid',
+      placeItems: 'center',
+      zIndex: 10000,
+      cursor: 'zoom-out'
+    }}
+  >
+    <img
+      src={src}
+      alt="preview"
+      style={{
+        maxWidth: '92vw',
+        maxHeight: '88vh',
+        borderRadius: 16,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.45)'
+      }}
+    />
+  </div>
+);
 
 const isFiniteCoord = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -302,6 +165,7 @@ const P2: React.FC = () => {
   const [rawMap, setRawMap] = useState<RawDeviceMap>({});
   const [alertedIds, setAlertedIds] = useState<Set<number>>(new Set());
   const [connected, setConnected] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   // 3) MQTT 연결 & 요청/응답
   const clientRef = useRef<MqttClient | null>(null);
@@ -486,9 +350,7 @@ const P2: React.FC = () => {
   }, [rawMap, idSet]);
 
   const [currentId, setCurrentId] = useState<number | null>(null);
-  useEffect(() => {
-    setCurrentId(items[0]?.id ?? null);
-  }, [items]);
+  // 처음 진입 시에는 패널을 표시하지 않는다. (마커 클릭 시에만 표시)
 
   const center = useMemo(() => {
     const valid = items.filter((i) => isFiniteCoord(i.lat) && isFiniteCoord(i.lng));
@@ -529,6 +391,7 @@ const P2: React.FC = () => {
           attribution='&copy; OSM contributors'
         />
         <FitToMarkers items={items} />
+        <MapClickCloser onClose={() => setCurrentId(null)} />
 
         {items.map((it) => (
           <Marker
@@ -550,82 +413,241 @@ const P2: React.FC = () => {
         ))}
       </MapContainer>
 
-      {/* Bottom info card for selected marker */}
+      {/* Bottom info card for selected marker - 개선된 버전 */}
       {current && (
         <div
           style={{
             position: "absolute",
-            left: 16,
-            right: 16,
-            bottom: 20,
-            background: "#fff",
-            borderRadius: 18,
-            boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-            padding: 16,
-            display: "grid",
-            gridTemplateColumns: "1fr auto",
-            gap: 12,
-            alignItems: "center",
+            left: 20,
+            right: 20,
+            bottom: 24,
+            background: "linear-gradient(135deg, #ffffff 0%, #fafafa 100%)",
+            borderRadius: 24,
+            boxShadow: "0 20px 50px rgba(0,0,0,0.15), 0 5px 20px rgba(0,0,0,0.08)",
+            padding: 24,
             zIndex: 9999,
             pointerEvents: "auto",
+            border: "1px solid rgba(255,255,255,0.5)",
           }}
         >
-          {/* 좌측 정보들 */}
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, border: "2px solid #d33", color: "#d33", display: "grid", placeItems: "center", fontWeight: 700 }}>🔔</div>
-              <div style={{ fontWeight: 700 }}>{current.id}번 퇴치기</div>
+          <button
+            onClick={() => setCurrentId(null)}
+            aria-label="close"
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              width: 34,
+              height: 34,
+              borderRadius: 12,
+              border: '0',
+              background: 'rgba(0,0,0,0.06)',
+              color: '#2d3436',
+              fontSize: 18,
+              fontWeight: 700,
+              lineHeight: 1,
+              cursor: 'pointer'
+            }}
+          >
+            ×
+          </button>
+          {/* 상단: 제목 영역 */}
+          <div style={{ 
+            display: "flex", 
+            alignItems: "center", 
+            gap: 12,
+            marginBottom: 16,
+            paddingBottom: 16,
+            borderBottom: "1px solid #f0f0f0"
+          }}>
+            <div style={{ 
+              width: 48, 
+              height: 48, 
+              borderRadius: 14, 
+              background: "linear-gradient(135deg, #ff4757 0%, #ff3742 100%)",
+              display: "grid", 
+              placeItems: "center", 
+              color: "white",
+              fontSize: 18,
+              fontWeight: 700,
+              boxShadow: "0 4px 12px rgba(255, 71, 87, 0.3)"
+            }}>
+              🔔
+            </div>
+            <div>
+              <div style={{ 
+                fontSize: 20, 
+                fontWeight: 700, 
+                color: "#2d3436",
+                marginBottom: 2
+              }}>
+                {current.id}번 퇴치기
+              </div>
+              <div style={{ 
+                fontSize: 14, 
+                color: "#636e72",
+                fontWeight: 500
+              }}>
+                야생동물 감지 시스템
+              </div>
+            </div>
+          </div>
+
+          {/* 메인 콘텐츠 영역 */}
+          <div style={{ display: "grid", gap: 16 }}>
+            {/* 상단: 배터리 & 사진 영역 (1:1 비율) */}
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "1.25fr 1fr",
+              gap: 16,
+              alignItems: "center"
+            }}>
+              {/* 배터리 & 상태 */}
+              <div style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: 12,
+                padding: "16px 20px",
+                borderRadius: 18,
+                background: current.statusDot === "green" ? "linear-gradient(135deg, #00b894 0%, #00a085 100%)" : "linear-gradient(135deg, #fd79a8 0%, #e84393 100%)",
+                color: "white",
+                fontWeight: 600,
+                fontSize: 14,
+                boxShadow: current.statusDot === "green" ? "0 4px 12px rgba(0, 184, 148, 0.3)" : "0 4px 12px rgba(253, 121, 168, 0.3)",
+                height: "100px"
+              }}>
+                <div style={{ 
+                  width: 36, 
+                  height: 48, 
+                  borderRadius: 8, 
+                  border: "2px solid rgba(255,255,255,0.3)", 
+                  display: "grid", 
+                  placeItems: "center", 
+                  fontWeight: 700,
+                  fontSize: 12,
+                  background: "rgba(255,255,255,0.1)"
+                }}>
+                  {current.battery ? `${current.battery}%` : "--"}
+                </div>
+                <div style={{ fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  상태: {current.status}
+                </div>
+              </div>
+
+              {/* 썸네일 */}
+              <div style={{ 
+                width: "100%", 
+                height: "100px", 
+                borderRadius: 18, 
+                overflow: "hidden", 
+                boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
+                border: "3px solid #ffffff"
+              }}>
+                {current.recent?.image ? (
+                  <img 
+                    src={current.recent.image} 
+                    alt="탐지된 동물" 
+                    style={{ 
+                      width: "100%", 
+                      height: "100%", 
+                      objectFit: "cover",
+                      transition: "transform 0.3s ease",
+                      cursor: "zoom-in"
+                    }}
+                    onMouseOver={(e) => {
+                      (e.target as HTMLImageElement).style.transform = "scale(1.05)";
+                    }}
+                    onMouseOut={(e) => {
+                      (e.target as HTMLImageElement).style.transform = "scale(1)";
+                    }}
+                    onClick={() => setPreviewSrc(current.recent!.image)}
+                  />
+                ) : (
+                  <div style={{ 
+                    width: "100%", 
+                    height: "100%", 
+                    display: "grid", 
+                    placeItems: "center", 
+                    color: "#b2bec3", 
+                    background: "linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    textAlign: "center",
+                    lineHeight: 1.3
+                  }}>
+                    📷<br/>미리보기<br/>없음
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 32, height: 52, borderRadius: 6, border: "2px solid #2e7d32", color: "#2e7d32", display: "grid", placeItems: "center", fontWeight: 700 }}>
-                {current.battery ? `${current.battery}%` : "--%"}
-              </div>
-              <div style={{ color: current.statusDot === "red" ? "#d33" : "#2e7d32", fontWeight: 700 }}>
-                상태: {current.status}
-              </div>
-            </div>
-
+            {/* 하단: 최근 탐지 시기 (꽉찬 너비) */}
             <div style={{
-              marginTop: 4,
-              padding: 12,
-              borderRadius: 14,
-              background: "#fdeaea",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
+              padding: "16px 20px",
+              borderRadius: 18,
+              background: "linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%)",
+              boxShadow: "0 6px 20px rgba(253, 203, 110, 0.25)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 12,
+              width: "100%"
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ fontSize: 20 }}>⚠️</div>
-                <div style={{ fontWeight: 700, color: "#c62828" }}>최근 탐지 시기</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ 
+                  fontSize: 24,
+                  filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))"
+                }}>⚠️</div>
+                <div style={{ 
+                  fontWeight: 700, 
+                  color: "#e17055",
+                  fontSize: 16
+                }}>최근 탐지 시기</div>
               </div>
-              <div style={{ fontWeight: 700, color: "#ff6f00" }}>{timeAgo(current.recent?.time)}</div>
+              <div style={{ 
+                fontWeight: 700, 
+                color: "#d63031",
+                fontSize: 15,
+                padding: "6px 12px",
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.4)"
+              }}>
+                {timeAgo(current.recent?.time)}
+              </div>
             </div>
-          </div>
-
-          {/* 우측 썸네일 */}
-          <div style={{ width: 150, height: 95, borderRadius: 14, overflow: "hidden", boxShadow: "0 6px 16px rgba(0,0,0,0.2)" }}>
-            {current.recent?.image ? (
-              <img src={current.recent.image} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              <div style={{ width: "100%", height: "100%", display: "grid", placeItems: "center", color: "#888", background: "#f3f3f3" }}>
-                미리보기 없음
-              </div>
-            )}
           </div>
         </div>
       )}
 
       {/* 상태/가이드 패널 */}
       {items.length === 0 && (
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#555', textAlign: 'center', padding: 16 }}>
-          {connected
-            ? <>P1에서 추가한 id와 일치하는 장치가 없어요.<br/>브로커 응답이 없으면 기본 데이터로 표시합니다.</>
-            : <>브로커에 연결 중이거나, 연결이 차단됐어요.<br/>잠시 후 기본 데이터로 표시될 수 있어요.</>}
+        <div style={{ 
+          position: 'absolute', 
+          inset: 0, 
+          display: 'grid', 
+          placeItems: 'center', 
+          color: '#74b9ff', 
+          textAlign: 'center', 
+          padding: 16,
+          background: 'rgba(255,255,255,0.9)',
+          fontSize: 16,
+          fontWeight: 500,
+          lineHeight: 1.6
+        }}>
+          <div style={{
+            padding: '24px 32px',
+            borderRadius: 20,
+            background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+            border: '1px solid #e9ecef'
+          }}>
+            {connected
+              ? <>🔍 P1에서 추가한 장치와 일치하는<br/>데이터를 찾고 있습니다...<br/><span style={{fontSize: 14, opacity: 0.7}}>브로커 응답이 없으면 기본 데이터로 표시됩니다.</span></>
+              : <>📡 브로커에 연결 중입니다...<br/><span style={{fontSize: 14, opacity: 0.7}}>잠시 후 기본 데이터로 표시될 수 있습니다.</span></>}
+          </div>
         </div>
       )}
+      {previewSrc && <ImagePreview src={previewSrc} onClose={() => setPreviewSrc(null)} />}
     </div>
   );
 };
