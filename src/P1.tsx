@@ -160,9 +160,9 @@ const P1: React.FC = () => {
         if (m.cmd === "new_device") {
           if (itemsRef.current.some((it) => it.id === idx)) return;
           toast((t) => (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 18 }}>
               <b>새로운 말뚝을 찾았어요!</b>
-              <div>id: {idx}</div>
+              <div style={{fontSize: 16}}>id: {idx}</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   onClick={() => {
@@ -244,7 +244,7 @@ const P1: React.FC = () => {
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20 }}
         >
           <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", padding: 20, width: 280, borderRadius: 10, textAlign: "center" }}>
-            <div style={{ fontWeight: 700, marginBottom: 12 }}>{selected.id}번 말뚝 삭제</div>
+            <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 18 }}>{selected.id}번 말뚝 삭제</div>
             <button style={{ background: "#000", color: "#fff", padding: "10px 16px", borderRadius: 8 }} onClick={handleDelete}>
               삭제
             </button>
