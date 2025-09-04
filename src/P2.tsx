@@ -126,14 +126,14 @@ const DetectionLogs: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       timeLabel: "9:00 A.M.",
       ago: "9월 2일(토)",
       target: "사람",
-      image: "https://picsum.photos/seed/person/220/160",
+      image: "https://picsum.photos/id/1/200/300",
     },
     {
       dateLabel: "2025.09.03",
       timeLabel: "11:30 A.M.",
       ago: "9월 3일(일)",
-      target: "고양이",
-      image: "https://picsum.photos/seed/cat/220/160",
+      target: "강아지",
+      image: "https://picsum.photos/id/237/200/300",
     },
   ];
 
@@ -448,6 +448,9 @@ const P2: React.FC = () => {
 
   // 2) 브로커에서 받은 전체 장치표 원본
   const [rawMap, setRawMap] = useState<RawDeviceMap>({});
+    // keep latest rawMap in a ref for message handler
+  const rawMapRef = useRef<RawDeviceMap>({});
+  useEffect(() => { rawMapRef.current = rawMap; }, [rawMap]);
   const [alertedIds, setAlertedIds] = useState<Set<number>>(new Set());
   const [connected, setConnected] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -533,6 +536,11 @@ const P2: React.FC = () => {
               : undefined;
 
           if (!recentArr) return;
+
+          // Ignore alert (al debug) if device is not GOOD
+          const curStatus = rawMapRef.current?.[String(numId)]?.status;
+          if (curStatus !== "GOOD") return;
+          
 
           // rawMap 내 해당 id만 recent_obj 교체
           setRawMap((prev) => {
